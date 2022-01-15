@@ -3,12 +3,17 @@ module.exports = {
   env: {
     es6: true,
     node: true,
+    browser: true
+  },
+  parserOptions: {
+    "ecmaVersion": 2018
   },
   extends: [
     "eslint:recommended",
   ],
   rules: {
     "quotes": ["error", "double"],
-    "max-len": ["error", {"code": 190}],
+    "max-len": "off",
+    "no-unused-vars": "off"
   },
 };

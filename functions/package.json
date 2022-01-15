@@ -15,11 +15,13 @@
   "main": "index.js",
   "dependencies": {
     "actions-on-google": "^2.5.0",
+    "cors": "^2.8.5",
     "dialogflow": "^0.6.0",
     "dialogflow-fulfillment": "^0.6.1",
     "firebase-admin": "^10.0.1",
     "firebase-functions": "^3.16.0",
-    "request": "^2.83.0"
+    "request": "^2.88.2",
+    "request-promise": "^4.2.6"
   },
   "devDependencies": {
     "eslint": "^7.6.0",

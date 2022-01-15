@@ -19,5 +19,6 @@
     "firebase-admin": "^10.0.1",
     "firebase-functions": "^3.16.0",
     "request": "^2.83.0"
-  }
+  },
+  "devDependencies": {}
 }

@@ -4,6 +4,8 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const {WebhookClient} = require("dialogflow-fulfillment");
 
+const rp = require("request-promise");
+
 process.env.DEBUG = "dialogflow:debug"; // enables lib debugging statements
 admin.initializeApp(functions.config().firebase);
 const db = admin.firestore();
@@ -18,21 +20,22 @@ let stressEventNum = 0;
 let glucoseEventDate; let insulinEventDate; let PEEventDate; let matchEventDate; let foodEventDate;
 
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
+  // const test = callModel("How are you?", response => {
+  //   console.log(response);
+  // });
+
   const agent = new WebhookClient({request, response});
   console.log("Dialogflow Request headers: " + JSON.stringify(request.headers));
   console.log("Dialogflow Request body: " + JSON.stringify(request.body));
 
   // Function used to store data to Firestore database in a collection named after the user Telegram ID
   // Data is stored as a pair key-value, and the document name is passed as an argument
-  function saveToDB(document, key, value) {
-    const userId = agent.originalRequest.payload.data.from.id;
+  async function saveToDB(document, key, value){
+    let userId = agent.originalRequest.payload.data.from.id;
     const dbDocument = db.collection(""+userId).doc(""+document);
-    return db.runTransaction((t) => {
-      t.set(dbDocument, {[key]: value}, {merge: true});
-      return Promise.resolve();
-    }).catch((err) => {
-      console.log(`Error writing to Firestore: ${err}`);
-    });
+    await dbDocument.set({
+      [key]:value
+    }, { merge: true });
   }
 
   // Function that receives a Unix timestamp, changes it to milliseconds, transforms it to a normal date format and
@@ -41,6 +44,38 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const milliseconds = timestamp * 1000;
     const dateObject = new Date(milliseconds);
     return (dateObject.getDate()+"-"+(dateObject.getMonth()+1)+"-"+dateObject.getFullYear());
+  }
+
+  function callModel(question, callback) {
+    const promise = new Promise((resolve) => {
+      let data = {message:question};
+
+      console.log(`callModel: ${JSON.stringify(data)}`);
+      
+      try {
+        rp({
+          method: "POST",
+          uri: "https://e8bd-46-24-247-212.ngrok.io/api",
+          body: data,
+          headers: {
+            "Content-Type": "application/json"
+          },
+          json: true
+        }).then(answer => {
+          console.log(`API call answer: ${JSON.stringify(answer)}`);
+          callback(answer.response);
+          resolve();
+        }).catch(function (err) {
+          console.log(`API call error: ${err}`);
+          resolve();
+        });
+      } catch (error) {
+        console.log(`API error: ${error}`);
+        resolve();
+      }
+    });
+
+    return promise;
   }
 
   // Function corresponding to the Welcome Intent. Agent response varies if it is a conversation with a new or known user.
@@ -52,10 +87,10 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     return db.collection(""+userId).doc("Basic Info").get()
         .then((doc) => {
           if (!doc.exists) {
-            agent.add("Hola, encantado de conocerte. ¿Cuál es tu nombre?");
+            agent.add("Hi, nice to meet you. What's your name?");
           } else {
             const user_name = doc.data().Name;
-            agent.add(`Hola de nuevo ${user_name}, ¿Qué tal estás?`);
+            agent.add(`Hi again ${user_name}, how are you today?`);
           }
           return Promise.resolve();
         }).catch(() => {
@@ -69,34 +104,34 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   function age(agent) {
     const user_age = agent.parameters.age;
     saveToDB("Basic Info", "Age", user_age);
-    agent.add("Y ¿Cuándo te diagnosticaron la diabetes?");
+    agent.add("So, when were you diagnosed your diabetes?");
   }
 
   function name(agent) {
     const user_name = agent.parameters["given-name"];
     saveToDB("Basic Info", "Name", user_name);
-    agent.add(`Un placer conocerte ${name}. Yo soy DM bot, y estaré aquí siempre que quieras compañía. 
-    Me han diseñado para mantener conversaciones de distintos temas, pero con un conocimiento especial acerca de la diabetes. 
-    Quiero aprovechar este conocimiento para ayudarte en todo lo que sea posible, pero antes me gustaría saber un poco más de ti.`);
-    agent.add("¿Qué edad tienes?");
+    agent.add(`It's a pleasure ${name}. I am DM bot, and I will be here for you whenever you want to chat. 
+    I've been created to have conversations about different topics, but with a special knowledge about diabetes. 
+    I want to use all my knowledge about diabetes to help you in anything I can, but before I would like to know a little bit more about you.`);
+    agent.add("How old are you?");
   }
 
   function DMDA(agent) {
     const DMAge = agent.parameters.DMAge;
     saveToDB("Basic Info", "DM Diagnosis Age", DMAge);
-    agent.add("Vaya... ¿Qué tipo de diabetes tienes?");
+    agent.add("Oh... What type is your diabetes?");
   }
 
   function DMType(agent) {
     const user_DMType = agent.parameters.DMType;
     saveToDB("Basic Info", "DM Type", user_DMType);
-    agent.add("Entonces, ¿Qué tratamiento utilizas para controlar tu glucosa en sangre?");
+    agent.add("Then, what kind of treatment do you use to control your blood glucose level?");
   }
 
   function DMTreatment(agent) {
     const user_DMTreatment = agent.parameters.DMTreatment;
     saveToDB("Basic Info", "Name", user_DMTreatment);
-    agent.add("¡Muchas gracias por ayudarme a conocerte mejor! Si tienes cualquier duda acerca de mi ahora es tu turno.");
+    agent.add("Thank you very much for helping me to get to know you better! If you have any question about me now is the time to ask them.");
   }
 
   // The following functions get DM information from daily messages and store it inside Firestore with
@@ -123,22 +158,20 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
     // Increase the number of glucose event or reset it in case the day is different
     glucoseEventNum += 1;
-    agent.add(`${glucoseEventNum} numero, ${glucoseEventDate} fecha`);
     if (glucoseEventDate != date) {
       glucoseEventNum = 1;
       glucoseEventDate = date;
-      agent.add(`${glucoseEventNum} numero, ${glucoseEventDate} fecha`);
     }
     // Save data inside Firestore in a document named after the date of the message
     saveToDB(""+date, "Glucose Event "+glucoseEventNum, data);
 
     // Send a different response to the user if glucose is good or not
-    if ((g_value > 80 && g_value < 150) || g_state == "bien") {
-      agent.add("Muy bien, es importante que tengas buen nivel de glucosa en sangre.");
-    } else {
-      agent.add("Bueno, es difícil mantenerse siempre dentro de rango.");
-      agent.add("¿Has llevado a cabo alguna acción para remediarlo?");
-    }
+    //if ((g_value > 80 && g_value < 150) || g_state == "bien") {
+    //  agent.add("Muy bien, es importante que tengas buen nivel de glucosa en sangre.");
+    //} else {
+    //  agent.add("Bueno, es difícil mantenerse siempre dentro de rango.");
+    //  agent.add("¿Has llevado a cabo alguna acción para remediarlo?");
+    //}
   }
 
   // Similar to glucose function but this has no optional parameters and agent's response depend on the type of insulin
@@ -159,11 +192,11 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       insulinEventDate = date;
     }
     saveToDB(""+date, "Insulin Injection Event "+insulinEventNum, data);
-    if (insulin_type == "lenta") {
-      agent.add("Muy bien. Si notas que tu nivel de glucosa en sangre aumenta o disminuye sin causa aparente deberías hablar con tu endocrino para modificar esta dosis.");
-    } else {
-      agent.add("Genial. Recuerda volver a comprobar tu nivel de glucosa en una hora y media para comprobar que la dosis ha sido adecuada.");
-    }
+    //if (insulin_type == "lenta") {
+    //  agent.add("Muy bien. Si notas que tu nivel de glucosa en sangre aumenta o disminuye sin causa aparente deberías hablar con tu endocrino para modificar esta dosis.");
+    //} else {
+    //  agent.add("Genial. Recuerda volver a comprobar tu nivel de glucosa en una hora y media para comprobar que la dosis ha sido adecuada.");
+    //}
   }
 
   function food(agent) {
@@ -196,8 +229,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       foodEventDate = date;
     }
     saveToDB(""+date, "Food Ingestion Event "+foodEventNum, data);
-    agent.add("¡Qué bueno! Si tuviera la capacidad de comer me encantaría probarlo.");
-    agent.add("Intenta tomar las medidas correspondientes para que esta comida no afecte a tu nivel de glucosa.");
+    //agent.add("¡Qué bueno! Si tuviera la capacidad de comer me encantaría probarlo.");
+    //agent.add("Intenta tomar las medidas correspondientes para que esta comida no afecte a tu nivel de glucosa.");
   }
 
   // Function similar to glucose but with different parameters (all of them required), and response is always the same
@@ -218,8 +251,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       PEEventDate = date;
     }
     saveToDB(""+date, "Physical Exercise Event "+PEEventNum, data);
-    agent.add(`¿${sport}? Me parece una forma genial de hacer ejercicio.`);
-    agent.add("Recuerda que el ejercicio puede afectar a tu nivel de glucosa en sangre, así que es posible que tengas que modificar tu dosis de insulina.");
+    //agent.add(`¿${sport}? Me parece una forma genial de hacer ejercicio.`);
+    //agent.add("Recuerda que el ejercicio puede afectar a tu nivel de glucosa en sangre, así que es posible que tengas que modificar tu dosis de insulina.");
   }
 
   // Function very similar to PE but with one less parameter
@@ -238,7 +271,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       matchEventDate = date;
     }
     saveToDB(""+date, "Sports Match Event "+matchEventNum, data);
-    agent.add("¿Qué tal ha ido? ¿Has ganado?");
+    //agent.add("¿Qué tal ha ido? ¿Has ganado?");
   }
 
   // Function similar to glucose but with only one mandatory parameter and only increasing event number, not restarted daily
@@ -246,11 +279,14 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
 
+    const message = agent.originalRequest.payload.data.text;
+
     const time = agent.parameters["date-time"];
 
     stressEventNum += 1;
     saveToDB(""+date, "Stress Event "+stressEventNum+" Date", time);
-    agent.add("Vaya, y ¿Cómo lo llevas?");
+    
+    return callModel(message, res => agent.add(res));
   }
 
   // Run the proper function handler based on the matched Dialogflow intent name
