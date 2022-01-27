@@ -20,9 +20,6 @@ let stressEventNum = 0;
 let glucoseEventDate; let insulinEventDate; let PEEventDate; let matchEventDate; let foodEventDate;
 
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
-  // const test = callModel("How are you?", response => {
-  //   console.log(response);
-  // });
 
   const agent = new WebhookClient({request, response});
   console.log("Dialogflow Request headers: " + JSON.stringify(request.headers));
@@ -55,7 +52,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       try {
         rp({
           method: "POST",
-          uri: "https://e8bd-46-24-247-212.ngrok.io/api",
+          uri: "https://976f-46-24-247-212.ngrok.io/api",
           body: data,
           headers: {
             "Content-Type": "application/json"
@@ -110,27 +107,27 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   function name(agent) {
     const user_name = agent.parameters["given-name"];
     saveToDB("Basic Info", "Name", user_name);
-    agent.add(`It's a pleasure ${name}. I am DM bot, and I will be here for you whenever you want to chat. 
+    agent.add(`It's a pleasure ${user_name}. I am DM bot, and I will be here for you whenever you want to chat. 
     I've been created to have conversations about different topics, but with a special knowledge about diabetes. 
     I want to use all my knowledge about diabetes to help you in anything I can, but before I would like to know a little bit more about you.`);
     agent.add("How old are you?");
   }
 
   function DMDA(agent) {
-    const DMAge = agent.parameters.DMAge;
+    const DMAge = agent.parameters["DM_Age"];
     saveToDB("Basic Info", "DM Diagnosis Age", DMAge);
     agent.add("Oh... What type is your diabetes?");
   }
 
   function DMType(agent) {
-    const user_DMType = agent.parameters.DMType;
+    const user_DMType = agent.parameters["DM_Type"];
     saveToDB("Basic Info", "DM Type", user_DMType);
     agent.add("Then, what kind of treatment do you use to control your blood glucose level?");
   }
 
   function DMTreatment(agent) {
-    const user_DMTreatment = agent.parameters.DMTreatment;
-    saveToDB("Basic Info", "Name", user_DMTreatment);
+    const user_DMTreatment = agent.parameters["DM_Treatment"];
+    saveToDB("Basic Info", "DM Treatment", user_DMTreatment);
     agent.add("Thank you very much for helping me to get to know you better! If you have any question about me now is the time to ask them.");
   }
 
@@ -141,6 +138,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     // Get the conversation date from Telegram payload data in Unix format, and transform to Date/time format
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
+    // Get the user message from Telegram payload data
+    //const message = agent.originalRequest.payload.data.text;
     // Store user's message parameter values in variables
     const g_state = agent.parameters.glucose_state;
     const g_value = agent.parameters.glucose_value;
@@ -166,18 +165,22 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     saveToDB(""+date, "Glucose Event "+glucoseEventNum, data);
 
     // Send a different response to the user if glucose is good or not
-    //if ((g_value > 80 && g_value < 150) || g_state == "bien") {
-    //  agent.add("Muy bien, es importante que tengas buen nivel de glucosa en sangre.");
-    //} else {
-    //  agent.add("Bueno, es difícil mantenerse siempre dentro de rango.");
-    //  agent.add("¿Has llevado a cabo alguna acción para remediarlo?");
-    //}
+    if ((g_value > 80 && g_value < 150) || g_state == "bien") {
+      agent.add("Great, it's important to have a good blood glucose level.");
+    } else {
+      agent.add("Well, it's difficult to have always a good level.");
+      agent.add("Did you do something to improve your blood glucose level?");
+    }
+
+    //return callModel(message, res => agent.add(res));
   }
 
   // Similar to glucose function but this has no optional parameters and agent's response depend on the type of insulin
   function insulin(agent) {
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
+
+    //const message = agent.originalRequest.payload.data.text;
 
     const insulin_type = agent.parameters.insulin_type;
     const insulin_dose = agent.parameters.insulin_units;
@@ -192,16 +195,20 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       insulinEventDate = date;
     }
     saveToDB(""+date, "Insulin Injection Event "+insulinEventNum, data);
-    //if (insulin_type == "lenta") {
-    //  agent.add("Muy bien. Si notas que tu nivel de glucosa en sangre aumenta o disminuye sin causa aparente deberías hablar con tu endocrino para modificar esta dosis.");
-    //} else {
-    //  agent.add("Genial. Recuerda volver a comprobar tu nivel de glucosa en una hora y media para comprobar que la dosis ha sido adecuada.");
-    //}
+    if (insulin_type == "lenta") {
+      agent.add("Ok. If you feel your blood sugar level increasing or decreasing without a cause you should speak with your doctor to modify this dose.");
+    } else {
+      agent.add("Great. Don't forget to check your blood glucose level in one and a half hours to check the dose was correct.");
+    }
+
+    //return callModel(message, res => agent.add(res));
   }
 
   function food(agent) {
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
+
+    //const message = agent.originalRequest.payload.data.text;
 
     const HCH_food = agent.parameters.hch_food;
     const LCH_food = agent.parameters.lch_food;
@@ -231,12 +238,16 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     saveToDB(""+date, "Food Ingestion Event "+foodEventNum, data);
     //agent.add("¡Qué bueno! Si tuviera la capacidad de comer me encantaría probarlo.");
     //agent.add("Intenta tomar las medidas correspondientes para que esta comida no afecte a tu nivel de glucosa.");
+
+    //return callModel(message, res => agent.add(res));
   }
 
   // Function similar to glucose but with different parameters (all of them required), and response is always the same
   function PE(agent) {
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
+
+    //const message = agent.originalRequest.payload.data.text;
 
     const sport = agent.parameters.sport;
     const duration = agent.parameters.duration;
@@ -253,12 +264,16 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     saveToDB(""+date, "Physical Exercise Event "+PEEventNum, data);
     //agent.add(`¿${sport}? Me parece una forma genial de hacer ejercicio.`);
     //agent.add("Recuerda que el ejercicio puede afectar a tu nivel de glucosa en sangre, así que es posible que tengas que modificar tu dosis de insulina.");
+
+    //return callModel(message, res => agent.add(res));
   }
 
   // Function very similar to PE but with one less parameter
   function match(agent) {
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
+
+    //const message = agent.originalRequest.payload.data.text;
 
     const sport = agent.parameters.sport;
     const time = agent.parameters["date-time"];
@@ -272,6 +287,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     }
     saveToDB(""+date, "Sports Match Event "+matchEventNum, data);
     //agent.add("¿Qué tal ha ido? ¿Has ganado?");
+
+    //return callModel(message, res => agent.add(res));
   }
 
   // Function similar to glucose but with only one mandatory parameter and only increasing event number, not restarted daily
@@ -279,14 +296,14 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const UnixDate = agent.originalRequest.payload.data.date;
     const date = UnixToDate(UnixDate);
 
-    const message = agent.originalRequest.payload.data.text;
+    //const message = agent.originalRequest.payload.data.text;
 
     const time = agent.parameters["date-time"];
 
     stressEventNum += 1;
     saveToDB(""+date, "Stress Event "+stressEventNum+" Date", time);
     
-    return callModel(message, res => agent.add(res));
+    //return callModel(message, res => agent.add(res));
   }
 
   // Run the proper function handler based on the matched Dialogflow intent name
