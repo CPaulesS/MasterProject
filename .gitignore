@@ -66,3 +66,5 @@ node_modules/
 .env
 Python/GPT_2_conversation_old.ipynb
 Python/Train_a_GPT_2_Text_Generating_Model_w_GPU.ipynb
+app/node-fetch/
+.babelrc.js
